@@ -2,6 +2,7 @@
 from odoo import http
 from odoo.http import request
 import json
+import math
 
 
 class OknumApi(http.Controller):
@@ -146,13 +147,39 @@ class OknumApi(http.Controller):
         }), headers={'Content-Type': 'application/json'})
 
     # get all oknum
-    @http.route('/api/oknum', auth='user', methods=['GET'], csrf=False, cors="*", website=False)
+    @http.route('/api/oknum', auth='user', methods=['POST'], csrf=False, cors="*", website=False)
     def getAllOknum(self, **kw):
         # operasional
         Oknum = request.env['persenan_plus.oknum'].sudo()
 
-        # ambil semua data oknum
-        oknums = Oknum.search([])
+        # ambil parameter halaman dan ukuran halaman
+        page = int(kw.get('page', 1))
+        limit = int(kw.get('limit', 10))
+        field = kw.get('field', 'id')
+        orderBy = kw.get('orderBy', 'asc')
+
+        # hitung offset
+        offset = (page - 1) * limit
+
+        # buat domain filter
+        domain = []
+
+        # tambahkan filter berdasarkan field jika ada
+        if 'name' in kw:
+            domain.append(('name', 'ilike', kw['name']))
+        if 'jabatan' in kw:
+            domain.append(('jabatan', 'ilike', kw['jabatan']))
+        if 'domisili' in kw:
+            domain.append(('domisili', 'ilike', kw['domisili']))
+
+        # ambil data oknum dengan paginasi dan filter
+        oknums = Oknum.search(
+            domain, offset=offset, limit=limit, order=field + ' ' + orderBy)
+
+        # hitung jumlah total halaman
+        total_count = Oknum.search_count(domain)
+
+        total_pages = math.ceil(total_count / limit)
 
         # response api
         response_data = []
@@ -163,7 +190,14 @@ class OknumApi(http.Controller):
                 'jabatan': oknum.jabatan,
                 'domisili': oknum.domisili,
             })
+
         return request.make_response(json.dumps({
             'status': 'success',
+            'message': 'berhasil mendapatkan semua data oknum',
             'data': response_data,
+            'meta': {
+                'page': page,
+                'limit': limit,
+                'total_pages': total_pages
+            }
         }), headers={'Content-Type': 'application/json'})
